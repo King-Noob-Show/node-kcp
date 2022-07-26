@@ -1,7 +1,7 @@
 {
   "name": "node-kcp-token",
   "version": "1.0.12",
-  "description": "Modified KCP protocol for Node.js, forked from https://github.com/leenjewel/node-kcp",
+  "description": "Modified KCP protocol for Node.js, forked from https://github.com/TheLostTree/node-kcp",
   "main": "index.js",
   "dependencies": {
     "nan": "^2.15.0"
@@ -19,7 +19,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/TheLostTree/node-kcp.git"
+    "url": "git+https://github.com/memetrollsXD/node-kcp.git"
   },
   "keywords": [
     "kcp",
@@ -27,11 +27,11 @@
     "game",
     "server"
   ],
-  "author": "TheLostTree",
+  "author": "memetrollsXD",
   "license": "Apache-2.0",
   "gypfile": true,
   "bugs": {
-    "url": "https://github.com/TheLostTree/node-kcp/issues"
+    "url": "https://github.com/memetrollsXD/node-kcp/issues"
   },
-  "homepage": "https://github.com/TheLostTree/node-kcp#readme"
+  "homepage": "https://github.com/memetrollsXD/node-kcp#readme"
 }
