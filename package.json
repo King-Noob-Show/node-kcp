@@ -1,6 +1,6 @@
 {
   "name": "node-kcp-token",
-  "version": "1.0.12",
+  "version": "1.0.13",
   "description": "Node KCP With Weird Ahh Token Support",
   "main": "index.js",
   "dependencies": {
