@@ -1,37 +1,32 @@
 {
   "name": "node-kcp-token",
   "version": "1.0.12",
-  "description": "Modified KCP protocol for Node.js, forked from https://github.com/TheLostTree/node-kcp",
+  "description": "Node KCP With Weird Ahh Token Support",
   "main": "index.js",
   "dependencies": {
-    "nan": "^2.15.0"
+    "nan": "^2.22.2"
   },
   "devDependencies": {
     "chai": "latest",
     "grunt": "^1.0.4",
     "grunt-contrib-clean": "latest",
     "grunt-mocha-test": "latest",
-    "mocha": "^7.2.0"
+    "mocha": "^11.2.2"
   },
   "scripts": {
     "test": "grunt",
-    "install": "node-gyp rebuild"
+    "install": "npm i nan -g && node-gyp rebuild"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/memetrollsXD/node-kcp.git"
+    "url": "git+https://github.com/King-Noob-Show/node-kcp.git"
   },
-  "keywords": [
-    "kcp",
-    "protocol",
-    "game",
-    "server"
-  ],
-  "author": "memetrollsXD",
+  "keywords": [],
+  "author": "King-Noob-Show",
   "license": "Apache-2.0",
   "gypfile": true,
   "bugs": {
-    "url": "https://github.com/memetrollsXD/node-kcp/issues"
+    "url": "https://github.com/King-Noob-Show/node-kcp/issues"
   },
-  "homepage": "https://github.com/memetrollsXD/node-kcp#readme"
+  "homepage": "https://github.com/King-Noob-Show/node-kcp#readme"
 }
