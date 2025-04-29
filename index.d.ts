@@ -9,6 +9,8 @@ import { AddressInfo } from "net"
 export class KCP {
     constructor(conv: number, token: number, user: AddressInfo)
 
+    stream(mode: number): void;
+
     wndsize(sndwnd: number, rcvwnd: number): void;
 
     setmtu(mtu: number): void;

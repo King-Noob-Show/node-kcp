@@ -1,10 +1,10 @@
 {
   "name": "node-kcp-token",
-  "version": "1.0.13",
+  "version": "1.0.14",
   "description": "Node KCP With Weird Ahh Token Support",
   "main": "index.js",
   "dependencies": {
-    "nan": "^2.22.2"
+    "node-addon-api": "^8.3.1"
   },
   "devDependencies": {
     "chai": "latest",
@@ -15,7 +15,12 @@
   },
   "scripts": {
     "test": "grunt",
-    "install": "npm i nan -g && node-gyp rebuild"
+      "install": "node-gyp rebuild",
+      "build": "node-gyp rebuild",
+      "rebuild": "node-gyp rebuild",
+      "clean": "node-gyp clean",
+      "preinstall": "npm install -g node-gyp node-addon-api",
+      "postinstall": "echo 'Installation complete'"
   },
   "repository": {
     "type": "git",
