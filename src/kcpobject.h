@@ -17,48 +17,48 @@
 #ifndef KCPOBJECT_H
 #define KCPOBJECT_H
 
-#include <nan.h>
-#include <nan_object_wrap.h>
+#include <napi.h>
 #include "kcp/ikcp.h"
 
-namespace node_kcp
-{
+namespace node_kcp {
 
-    class KCPObject : public Nan::ObjectWrap
-    {
-    public:
-        static NAN_MODULE_INIT(Init);
+class KCPObject : public Napi::ObjectWrap<KCPObject> {
+public:
+    static Napi::Object Init(Napi::Env env, Napi::Object exports);
+    KCPObject(const Napi::CallbackInfo& info);
+    ~KCPObject();
 
-    private:
-        explicit KCPObject(IUINT32 conv, IUINT32 token);
-        ~KCPObject();
+    inline static Napi::FunctionReference constructor;
 
-        static NAN_METHOD(New);
-        static NAN_METHOD(Release);
-        static NAN_METHOD(GetContext);
-        static NAN_METHOD(Recv);
-        static NAN_METHOD(Send);
-        static NAN_METHOD(Output);
-        static NAN_METHOD(Input);
-        static NAN_METHOD(Update);
-        static NAN_METHOD(Check);
-        static NAN_METHOD(Flush);
-        static NAN_METHOD(Peeksize);
-        static NAN_METHOD(Setmtu);
-        static NAN_METHOD(Wndsize);
-        static NAN_METHOD(Waitsnd);
-        static NAN_METHOD(Nodelay);
-        static NAN_METHOD(Stream);
+    static Napi::Value NewInstance(const Napi::CallbackInfo& info);
 
-        static Nan::Persistent<v8::Function> constructor;
-        static int kcp_output(const char *buf, int len, ikcpcb *kcp, void *user);
-        ikcpcb *kcp;
-        Nan::Persistent<v8::Function> output;
-        Nan::Persistent<v8::Object> context;
-        char *recvBuff = NULL;
-        unsigned int recvBuffSize = 1024;
-    };
+private:
+    static int KcpOutput(const char* buf, int len, ikcpcb* kcp, void* user);
 
-}
+    // Methods
+    Napi::Value Release(const Napi::CallbackInfo& info);
+    Napi::Value GetContext(const Napi::CallbackInfo& info);
+    Napi::Value Recv(const Napi::CallbackInfo& info);
+    Napi::Value Send(const Napi::CallbackInfo& info);
+    Napi::Value Input(const Napi::CallbackInfo& info);
+    Napi::Value Output(const Napi::CallbackInfo& info);
+    Napi::Value Update(const Napi::CallbackInfo& info);
+    Napi::Value Check(const Napi::CallbackInfo& info);
+    Napi::Value Flush(const Napi::CallbackInfo& info);
+    Napi::Value Peeksize(const Napi::CallbackInfo& info);
+    Napi::Value Setmtu(const Napi::CallbackInfo& info);
+    Napi::Value Wndsize(const Napi::CallbackInfo& info);
+    Napi::Value Waitsnd(const Napi::CallbackInfo& info);
+    Napi::Value Nodelay(const Napi::CallbackInfo& info);
+    Napi::Value Stream(const Napi::CallbackInfo& info);
+
+    ikcpcb* kcp;
+    Napi::FunctionReference output;
+    Napi::ObjectReference context;
+    char* recvBuff;
+    unsigned int recvBuffSize;
+};
+
+} // namespace node_kcp
 
 #endif

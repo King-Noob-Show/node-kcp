@@ -15,429 +15,319 @@
  */
 
 #include "kcpobject.h"
-#include "node_buffer.h"
-#include <string.h>
+#include <napi.h>
+#include <cstring>
 
 #define RECV_BUFFER_SIZE 4096
 
-namespace node_kcp
-{
-    using Nan::Callback;
-    using Nan::FunctionCallbackInfo;
-    using Nan::GetFunction;
-    using Nan::MaybeLocal;
-    using Nan::Null;
-    using Nan::Persistent;
-    using Nan::Set;
-    using Nan::To;
-    using v8::Context;
-    using v8::Exception;
-    using v8::Function;
-    using v8::FunctionTemplate;
-    using v8::Integer;
-    using v8::Local;
-    using v8::Number;
-    using v8::Object;
-    using v8::String;
-    using v8::Value;
+namespace node_kcp {
 
-    Persistent<Function> KCPObject::constructor;
-
-    int KCPObject::kcp_output(const char *buf, int len, ikcpcb *kcp, void *user)
-    {
-        KCPObject *thiz = (KCPObject *)user;
-        if (thiz->output.IsEmpty())
-        {
-            return len;
-        }
-        if (thiz->context.IsEmpty())
-        {
-            const unsigned argc = 2;
-            Local<Value> argv[argc] = {
-                Nan::CopyBuffer(buf, len).ToLocalChecked(),
-                Nan::New<Number>(len)};
-            Callback callback(Nan::New<Function>(thiz->output));
-            Nan::Call(callback, argc, argv);
-        }
-        else
-        {
-            const unsigned argc = 3;
-            Local<Value> argv[argc] = {
-                Nan::CopyBuffer(buf, len).ToLocalChecked(),
-                Nan::New<Number>(len),
-                Nan::New<Object>(thiz->context)};
-            Callback callback(Nan::New<Function>(thiz->output));
-            Nan::Call(callback, argc, argv);
-        }
+int KCPObject::KcpOutput(const char* buf, int len, ikcpcb* kcp, void* user) {
+    KCPObject* thiz = (KCPObject*)user;
+    if (thiz->output.IsEmpty()) {
         return len;
     }
 
-    KCPObject::KCPObject(IUINT32 conv, IUINT32 token)
-    {
-        kcp = ikcp_create(conv, token, this);
-        kcp->output = KCPObject::kcp_output;
-        recvBuff = (char *)realloc(recvBuff, recvBuffSize);
+    Napi::Env env = thiz->Env();
+    Napi::HandleScope scope(env);
+
+    Napi::Buffer<char> buffer = Napi::Buffer<char>::Copy(env, buf, len);
+    Napi::Number size = Napi::Number::New(env, len);
+
+    if (thiz->context.IsEmpty()) {
+        thiz->output.Call({buffer, size});
+    } else {
+        thiz->output.Call({buffer, size, thiz->context.Value()});
     }
-
-    KCPObject::~KCPObject()
-    {
-        if (kcp)
-        {
-            ikcp_release(kcp);
-            kcp = NULL;
-        }
-        if (recvBuff)
-        {
-            free(recvBuff);
-            recvBuff = NULL;
-        }
-        if (!output.IsEmpty())
-        {
-            output.Reset();
-        }
-        if (!context.IsEmpty())
-        {
-            context.Reset();
-        }
-    }
-
-    NAN_MODULE_INIT(KCPObject::Init)
-    {
-        Local<FunctionTemplate> tpl = Nan::New<FunctionTemplate>(New);
-        tpl->SetClassName(Nan::New("KCPObject").ToLocalChecked());
-        tpl->InstanceTemplate()->SetInternalFieldCount(1);
-
-        SetPrototypeMethod(tpl, "release", Release);
-        SetPrototypeMethod(tpl, "context", GetContext);
-        SetPrototypeMethod(tpl, "recv", Recv);
-        SetPrototypeMethod(tpl, "send", Send);
-        SetPrototypeMethod(tpl, "input", Input);
-        SetPrototypeMethod(tpl, "output", Output);
-        SetPrototypeMethod(tpl, "update", Update);
-        SetPrototypeMethod(tpl, "check", Check);
-        SetPrototypeMethod(tpl, "flush", Flush);
-        SetPrototypeMethod(tpl, "peeksize", Peeksize);
-        SetPrototypeMethod(tpl, "setmtu", Setmtu);
-        SetPrototypeMethod(tpl, "wndsize", Wndsize);
-        SetPrototypeMethod(tpl, "waitsnd", Waitsnd);
-        SetPrototypeMethod(tpl, "nodelay", Nodelay);
-        SetPrototypeMethod(tpl, "stream", Stream);
-
-        constructor.Reset(GetFunction(tpl).ToLocalChecked());
-        Set(target, Nan::New("KCP").ToLocalChecked(), GetFunction(tpl).ToLocalChecked());
-    }
-
-    NAN_METHOD(KCPObject::New)
-    {
-        if (!info[0]->IsNumber())
-        {
-            Nan::ThrowTypeError("kcp.KCP 1 arg must be number");
-            return;
-        }
-        if (info.IsConstructCall())
-        {
-            uint32_t conv = To<uint32_t>(info[0]).FromJust();
-            uint32_t token = To<uint32_t>(info[1]).FromJust();
-            KCPObject *kcpobj = new KCPObject(conv, token);
-            if (info[2]->IsObject())
-            {
-                kcpobj->context.Reset(Local<Object>::Cast(info[2]));
-            }
-            kcpobj->Wrap(info.This());
-            info.GetReturnValue().Set(info.This());
-        }
-        else
-        {
-            Local<Value> argv[2] = {
-                info[0],
-                info[1]};
-            Local<Function> cons = Nan::New(constructor);
-            info.GetReturnValue().Set(Nan::NewInstance(cons, 2, argv).ToLocalChecked());
-        }
-    }
-
-    NAN_METHOD(KCPObject::GetContext)
-    {
-        KCPObject *thiz = ObjectWrap::Unwrap<KCPObject>(info.Holder());
-        if (!thiz->context.IsEmpty())
-        {
-            info.GetReturnValue().Set(Nan::New<Object>(thiz->context));
-        }
-    }
-
-    NAN_METHOD(KCPObject::Release)
-    {
-        KCPObject *thiz = ObjectWrap::Unwrap<KCPObject>(info.Holder());
-        if (thiz->kcp)
-        {
-            ikcp_release(thiz->kcp);
-            thiz->kcp = NULL;
-        }
-        if (thiz->recvBuff)
-        {
-            free(thiz->recvBuff);
-            thiz->recvBuff = NULL;
-        }
-    }
-
-    NAN_METHOD(KCPObject::Recv)
-    {
-        KCPObject *thiz = ObjectWrap::Unwrap<KCPObject>(info.Holder());
-        int bufsize = 0;
-        unsigned int allsize = 0;
-        int buflen = 0;
-        int len = 0;
-        while (1)
-        {
-            bufsize = ikcp_peeksize(thiz->kcp);
-            if (bufsize <= 0)
-            {
-                break;
-            }
-            allsize += bufsize;
-            if (allsize > thiz->recvBuffSize)
-            {
-                int align = allsize % 4;
-                if (align)
-                {
-                    allsize += 4 - align;
-                }
-                thiz->recvBuffSize = allsize;
-                thiz->recvBuff = (char *)realloc(thiz->recvBuff, thiz->recvBuffSize);
-                if (!thiz->recvBuff)
-                {
-                    Nan::ThrowError("realloc error");
-                    len = 0;
-                    break;
-                }
-            }
-
-            buflen = ikcp_recv(thiz->kcp, thiz->recvBuff + len, bufsize);
-            if (buflen <= 0)
-            {
-                break;
-            }
-            len += buflen;
-            if (thiz->kcp->stream == 0)
-            {
-                break;
-            }
-        }
-        if (len > 0)
-        {
-            info.GetReturnValue().Set(
-                Nan::CopyBuffer((const char *)thiz->recvBuff, len).ToLocalChecked());
-        }
-    }
-
-    NAN_METHOD(KCPObject::Input)
-    {
-        KCPObject *thiz = ObjectWrap::Unwrap<KCPObject>(info.Holder());
-        char *buf = NULL;
-        int len = 0;
-        Local<Value> arg0 = info[0];
-        if (arg0->IsString())
-        {
-            Nan::Utf8String data(arg0);
-            len = data.length();
-            if (0 == len)
-            {
-                Nan::ThrowError("INput Nan Utf8String error");
-                return;
-            }
-            int t = ikcp_input(thiz->kcp, *data, len);
-            Local<Number> ret = Nan::New(t);
-            info.GetReturnValue().Set(ret);
-            free(buf);
-        }
-        else if (node::Buffer::HasInstance(arg0))
-        {
-            Nan::MaybeLocal<v8::Object> maybeObj = Nan::To<v8::Object>(arg0);
-            v8::Local<Object> obj;
-            if (!maybeObj.ToLocal(&obj))
-            {
-                return;
-            }
-            len = node::Buffer::Length(obj);
-            if (0 == len)
-            {
-                return;
-            }
-            buf = node::Buffer::Data(obj);
-            int t = ikcp_input(thiz->kcp, (const char *)buf, len);
-            Local<Number> ret = Nan::New(t);
-            info.GetReturnValue().Set(ret);
-        }
-    }
-
-    NAN_METHOD(KCPObject::Send)
-    {
-        KCPObject *thiz = ObjectWrap::Unwrap<KCPObject>(info.Holder());
-        char *buf = NULL;
-        int len = 0;
-        Local<Value> arg0 = info[0];
-        if (arg0->IsString())
-        {
-            Nan::Utf8String data(arg0);
-            len = data.length();
-            if (0 == len)
-            {
-                Nan::ThrowError("Send Nan Utf8String error");
-                return;
-            }
-            int t = ikcp_send(thiz->kcp, *data, len);
-            Local<Number> ret = Nan::New(t);
-            info.GetReturnValue().Set(ret);
-            free(buf);
-        }
-        else if (node::Buffer::HasInstance(arg0))
-        {
-            Nan::MaybeLocal<v8::Object> maybeObj = Nan::To<v8::Object>(arg0);
-            v8::Local<Object> obj;
-            if (!maybeObj.ToLocal(&obj))
-            {
-                return;
-            }
-            // len = node::Buffer::Length(arg0->ToObject(isolate));
-            len = node::Buffer::Length(obj);
-            if (0 == len)
-            {
-                return;
-            }
-            // buf = node::Buffer::Data(arg0->ToObject(isolate));
-            buf = node::Buffer::Data(obj);
-            int t = ikcp_send(thiz->kcp, (const char *)buf, len);
-            Local<Number> ret = Nan::New(t);
-            info.GetReturnValue().Set(ret);
-        }
-    }
-
-    NAN_METHOD(KCPObject::Output)
-    {
-        if (!info[0]->IsFunction())
-        {
-            return;
-        }
-        KCPObject *thiz = ObjectWrap::Unwrap<KCPObject>(info.Holder());
-        thiz->output.Reset(Local<Function>::Cast(info[0]));
-    }
-
-    NAN_METHOD(KCPObject::Update)
-    {
-        if (!info[0]->IsNumber())
-        {
-            Nan::ThrowTypeError("KCP update first argument must be number");
-            return;
-        }
-        KCPObject *thiz = ObjectWrap::Unwrap<KCPObject>(info.Holder());
-        int64_t arg0 = To<int64_t>(info[0]).FromJust();
-        IUINT32 current = (IUINT32)(arg0 & 0xfffffffful);
-        ikcp_update(thiz->kcp, current);
-    }
-
-    NAN_METHOD(KCPObject::Check)
-    {
-        if (!info[0]->IsNumber())
-        {
-            Nan::ThrowTypeError("KCP check first argument must be number");
-            return;
-        }
-
-        KCPObject *thiz = ObjectWrap::Unwrap<KCPObject>(info.Holder());
-        int64_t arg0 = To<int64_t>(info[0]).FromJust();
-        IUINT32 current = (IUINT32)(arg0 & 0xfffffffful);
-        // bruh?
-        IUINT32 ret = ikcp_check(thiz->kcp, current) - current;
-        Local<Integer> num = Nan::New((uint32_t)(ret > 0 ? ret : 0));
-        info.GetReturnValue().Set(num);
-    }
-
-    NAN_METHOD(KCPObject::Flush)
-    {
-        KCPObject *thiz = ObjectWrap::Unwrap<KCPObject>(info.Holder());
-        ikcp_flush(thiz->kcp);
-    }
-
-    NAN_METHOD(KCPObject::Peeksize)
-    {
-        KCPObject *thiz = ObjectWrap::Unwrap<KCPObject>(info.Holder());
-        Local<v8::Int32> ret = Nan::New(ikcp_peeksize(thiz->kcp));
-        info.GetReturnValue().Set(ret);
-    }
-
-    NAN_METHOD(KCPObject::Setmtu)
-    {
-        int mtu = 1400;
-        if (info[0]->IsNumber())
-        {
-            mtu = To<int>(info[0]).FromJust();
-        }
-        KCPObject *thiz = ObjectWrap::Unwrap<KCPObject>(info.Holder());
-        Local<v8::Int32> ret = Nan::New(ikcp_setmtu(thiz->kcp, mtu));
-        info.GetReturnValue().Set(ret);
-    }
-
-    NAN_METHOD(KCPObject::Wndsize)
-    {
-        int sndwnd = 32;
-        int rcvwnd = 32;
-        if (info[0]->IsNumber())
-        {
-            sndwnd = To<int>(info[0]).FromJust();
-        }
-        if (info[1]->IsNumber())
-        {
-            rcvwnd = To<int>(info[1]).FromJust();
-        }
-        KCPObject *thiz = ObjectWrap::Unwrap<KCPObject>(info.Holder());
-        Local<v8::Int32> ret = Nan::New(ikcp_wndsize(thiz->kcp, sndwnd, rcvwnd));
-        info.GetReturnValue().Set(ret);
-    }
-
-    NAN_METHOD(KCPObject::Waitsnd)
-    {
-        KCPObject *thiz = ObjectWrap::Unwrap<KCPObject>(info.Holder());
-        Local<v8::Int32> ret = Nan::New(ikcp_waitsnd(thiz->kcp));
-        info.GetReturnValue().Set(ret);
-    }
-
-    NAN_METHOD(KCPObject::Nodelay)
-    {
-        int nodelay = 0;
-        int interval = 100;
-        int resend = 0;
-        int nc = 0;
-        if (info[0]->IsNumber())
-        {
-            nodelay = To<int>(info[0]).FromJust();
-        }
-        if (info[1]->IsNumber())
-        {
-            interval = To<int>(info[1]).FromJust();
-        }
-        if (info[2]->IsNumber())
-        {
-            resend = To<int>(info[2]).FromJust();
-        }
-        if (info[3]->IsNumber())
-        {
-            nc = To<int>(info[3]).FromJust();
-        }
-        KCPObject *thiz = ObjectWrap::Unwrap<KCPObject>(info.Holder());
-        Local<v8::Int32> ret = Nan::New(ikcp_nodelay(thiz->kcp, nodelay, interval, resend, nc));
-        info.GetReturnValue().Set(ret);
-    }
-
-    NAN_METHOD(KCPObject::Stream)
-    {
-        if (info[0]->IsNumber())
-        {
-            int stream = To<int>(info[0]).FromJust();
-            KCPObject *thiz = ObjectWrap::Unwrap<KCPObject>(info.Holder());
-            thiz->kcp->stream = stream;
-            Local<v8::Int32> ret = Nan::New(thiz->kcp->stream);
-            info.GetReturnValue().Set(ret);
-        }
-    }
-
+    return len;
 }
+
+KCPObject::KCPObject(const Napi::CallbackInfo& info) : Napi::ObjectWrap<KCPObject>(info),
+    recvBuff(nullptr), recvBuffSize(RECV_BUFFER_SIZE) {
+    Napi::Env env = info.Env();
+
+    if (!info[0].IsNumber() || !info[1].IsNumber()) {
+        Napi::TypeError::New(env, "kcp.KCP requires conv (number) and token (number) arguments")
+            .ThrowAsJavaScriptException();
+        return;
+    }
+
+    uint32_t conv = info[0].As<Napi::Number>().Uint32Value();
+    uint32_t token = info[1].As<Napi::Number>().Uint32Value();
+
+    kcp = ikcp_create(conv, token, this);
+    kcp->output = KcpOutput;
+    recvBuff = (char*)malloc(recvBuffSize);
+
+    if (info.Length() > 2 && info[2].IsObject()) {
+        context.Reset(info[2].As<Napi::Object>(), 1);
+    }
+}
+
+KCPObject::~KCPObject() {
+    if (kcp) {
+        ikcp_release(kcp);
+        kcp = nullptr;
+    }
+    if (recvBuff) {
+        free(recvBuff);
+        recvBuff = nullptr;
+    }
+}
+
+Napi::Object KCPObject::Init(Napi::Env env, Napi::Object exports) {
+    Napi::Function func = DefineClass(env, "KCP", {
+        InstanceMethod("release", &KCPObject::Release),
+        InstanceMethod("context", &KCPObject::GetContext),
+        InstanceMethod("recv", &KCPObject::Recv),
+        InstanceMethod("send", &KCPObject::Send),
+        InstanceMethod("input", &KCPObject::Input),
+        InstanceMethod("output", &KCPObject::Output),
+        InstanceMethod("update", &KCPObject::Update),
+        InstanceMethod("check", &KCPObject::Check),
+        InstanceMethod("flush", &KCPObject::Flush),
+        InstanceMethod("peeksize", &KCPObject::Peeksize),
+        InstanceMethod("setmtu", &KCPObject::Setmtu),
+        InstanceMethod("wndsize", &KCPObject::Wndsize),
+        InstanceMethod("waitsnd", &KCPObject::Waitsnd),
+        InstanceMethod("nodelay", &KCPObject::Nodelay),
+        InstanceMethod("stream", &KCPObject::Stream)
+    });
+
+    constructor = Napi::Persistent(func);
+    constructor.SuppressDestruct();
+
+    exports.Set("KCP", func);
+    return exports;
+}
+
+Napi::Value KCPObject::NewInstance(const Napi::CallbackInfo& info) {
+    Napi::Env env = info.Env();
+    if (info.Length() < 2 || !info[0].IsNumber() || !info[1].IsNumber()) {
+        Napi::TypeError::New(env, "Expected two number arguments").ThrowAsJavaScriptException();
+        return env.Null();
+    }
+
+    // Create new instance
+    Napi::Object obj = constructor.New({
+        info[0],  // conv
+        info[1]   // token
+    });
+
+    return obj;
+}
+
+Napi::Value KCPObject::GetContext(const Napi::CallbackInfo& info) {
+    if (!context.IsEmpty()) {
+        return context.Value();
+    }
+    return info.Env().Undefined();
+}
+
+Napi::Value KCPObject::Release(const Napi::CallbackInfo& info) {
+    if (kcp) {
+        ikcp_release(kcp);
+        kcp = nullptr;
+    }
+    if (recvBuff) {
+        free(recvBuff);
+        recvBuff = nullptr;
+    }
+    return info.Env().Undefined();
+}
+
+Napi::Value KCPObject::Recv(const Napi::CallbackInfo& info) {
+    Napi::Env env = info.Env();
+    int bufsize = 0;
+    unsigned int allsize = 0;
+    int buflen = 0;
+    int len = 0;
+
+    while (1) {
+        bufsize = ikcp_peeksize(kcp);
+        if (bufsize <= 0) {
+            break;
+        }
+        allsize += bufsize;
+        if (allsize > recvBuffSize) {
+            int align = allsize % 4;
+            if (align) {
+                allsize += 4 - align;
+            }
+            recvBuffSize = allsize;
+            recvBuff = (char*)realloc(recvBuff, recvBuffSize);
+            if (!recvBuff) {
+                Napi::Error::New(env, "realloc error").ThrowAsJavaScriptException();
+                len = 0;
+                break;
+            }
+        }
+
+        buflen = ikcp_recv(kcp, recvBuff + len, bufsize);
+        if (buflen <= 0) {
+            break;
+        }
+        len += buflen;
+        if (kcp->stream == 0) {
+            break;
+        }
+    }
+
+    if (len > 0) {
+        return Napi::Buffer<char>::Copy(env, recvBuff, len);
+    }
+    return env.Undefined();
+}
+
+Napi::Value KCPObject::Input(const Napi::CallbackInfo& info) {
+    Napi::Env env = info.Env();
+    if (info.Length() < 1) {
+        return env.Undefined();
+    }
+
+    if (info[0].IsString()) {
+        std::string str = info[0].As<Napi::String>();
+        int len = str.length();
+        if (len == 0) {
+            Napi::Error::New(env, "Input string error").ThrowAsJavaScriptException();
+            return env.Undefined();
+        }
+        int t = ikcp_input(kcp, str.c_str(), len);
+        return Napi::Number::New(env, t);
+    } else if (info[0].IsBuffer()) {
+        Napi::Buffer<char> buffer = info[0].As<Napi::Buffer<char>>();
+        int len = buffer.Length();
+        if (len == 0) {
+            return env.Undefined();
+        }
+        char* buf = buffer.Data();
+        int t = ikcp_input(kcp, buf, len);
+        return Napi::Number::New(env, t);
+    }
+    return env.Undefined();
+}
+
+Napi::Value KCPObject::Send(const Napi::CallbackInfo& info) {
+    Napi::Env env = info.Env();
+    if (info.Length() < 1) {
+        return env.Undefined();
+    }
+
+    if (info[0].IsString()) {
+        std::string str = info[0].As<Napi::String>();
+        int len = str.length();
+        if (len == 0) {
+            Napi::Error::New(env, "Send string error").ThrowAsJavaScriptException();
+            return env.Undefined();
+        }
+        int t = ikcp_send(kcp, str.c_str(), len);
+        return Napi::Number::New(env, t);
+    } else if (info[0].IsBuffer()) {
+        Napi::Buffer<char> buffer = info[0].As<Napi::Buffer<char>>();
+        int len = buffer.Length();
+        if (len == 0) {
+            return env.Undefined();
+        }
+        char* buf = buffer.Data();
+        int t = ikcp_send(kcp, buf, len);
+        return Napi::Number::New(env, t);
+    }
+    return env.Undefined();
+}
+
+Napi::Value KCPObject::Output(const Napi::CallbackInfo& info) {
+    if (!info[0].IsFunction()) {
+        return info.Env().Undefined();
+    }
+    output.Reset(info[0].As<Napi::Function>(), 1);
+    return info.Env().Undefined();
+}
+
+Napi::Value KCPObject::Update(const Napi::CallbackInfo& info) {
+    if (!info[0].IsNumber()) {
+        Napi::TypeError::New(info.Env(), "KCP update first argument must be number")
+            .ThrowAsJavaScriptException();
+        return info.Env().Undefined();
+    }
+    int64_t arg0 = info[0].As<Napi::Number>().Int64Value();
+    IUINT32 current = (IUINT32)(arg0 & 0xfffffffful);
+    ikcp_update(kcp, current);
+    return info.Env().Undefined();
+}
+
+Napi::Value KCPObject::Check(const Napi::CallbackInfo& info) {
+    if (!info[0].IsNumber()) {
+        Napi::TypeError::New(info.Env(), "KCP check first argument must be number")
+            .ThrowAsJavaScriptException();
+        return info.Env().Undefined();
+    }
+
+    int64_t arg0 = info[0].As<Napi::Number>().Int64Value();
+    IUINT32 current = (IUINT32)(arg0 & 0xfffffffful);
+    IUINT32 ret = ikcp_check(kcp, current) - current;
+    return Napi::Number::New(info.Env(), (uint32_t)(ret > 0 ? ret : 0));
+}
+
+Napi::Value KCPObject::Flush(const Napi::CallbackInfo& info) {
+    ikcp_flush(kcp);
+    return info.Env().Undefined();
+}
+
+Napi::Value KCPObject::Peeksize(const Napi::CallbackInfo& info) {
+    return Napi::Number::New(info.Env(), ikcp_peeksize(kcp));
+}
+
+Napi::Value KCPObject::Setmtu(const Napi::CallbackInfo& info) {
+    int mtu = 1400;
+    if (info[0].IsNumber()) {
+        mtu = info[0].As<Napi::Number>().Int32Value();
+    }
+    return Napi::Number::New(info.Env(), ikcp_setmtu(kcp, mtu));
+}
+
+Napi::Value KCPObject::Wndsize(const Napi::CallbackInfo& info) {
+    int sndwnd = 32;
+    int rcvwnd = 32;
+    if (info[0].IsNumber()) {
+        sndwnd = info[0].As<Napi::Number>().Int32Value();
+    }
+    if (info[1].IsNumber()) {
+        rcvwnd = info[1].As<Napi::Number>().Int32Value();
+    }
+    return Napi::Number::New(info.Env(), ikcp_wndsize(kcp, sndwnd, rcvwnd));
+}
+
+Napi::Value KCPObject::Waitsnd(const Napi::CallbackInfo& info) {
+    return Napi::Number::New(info.Env(), ikcp_waitsnd(kcp));
+}
+
+Napi::Value KCPObject::Nodelay(const Napi::CallbackInfo& info) {
+    int nodelay = 0;
+    int interval = 100;
+    int resend = 0;
+    int nc = 0;
+    if (info[0].IsNumber()) {
+        nodelay = info[0].As<Napi::Number>().Int32Value();
+    }
+    if (info[1].IsNumber()) {
+        interval = info[1].As<Napi::Number>().Int32Value();
+    }
+    if (info[2].IsNumber()) {
+        resend = info[2].As<Napi::Number>().Int32Value();
+    }
+    if (info[3].IsNumber()) {
+        nc = info[3].As<Napi::Number>().Int32Value();
+    }
+    return Napi::Number::New(info.Env(), ikcp_nodelay(kcp, nodelay, interval, resend, nc));
+}
+
+Napi::Value KCPObject::Stream(const Napi::CallbackInfo& info) {
+    if (info[0].IsNumber()) {
+        int stream = info[0].As<Napi::Number>().Int32Value();
+        kcp->stream = stream;
+        return Napi::Number::New(info.Env(), kcp->stream);
+    }
+    return info.Env().Undefined();
+}
+
+} // namespace node_kcp

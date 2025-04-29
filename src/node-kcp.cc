@@ -15,18 +15,16 @@
  */
 
 #include "kcpobject.h"
+#include <napi.h>
 
 namespace node_kcp {
 
-    using v8::Local;
-    using v8::Object;
-
-    void InitModule(Local<Object> exports)
-    {
-        KCPObject::Init(exports);
-    }
-
-    NODE_MODULE(kcp, InitModule)
-
+Napi::Object InitModule(Napi::Env env, Napi::Object exports) {
+    KCPObject::Init(env, exports);
+    return exports;
 }
+
+NODE_API_MODULE(kcp, InitModule)
+
+} // namespace node_kcp
 
